@@ -1,5 +1,5 @@
 from django.db import models
-from django.db.models import F
+from django.db.models import F, Q
 from rest_framework.exceptions import ValidationError
 
 
@@ -46,11 +46,53 @@ class Team(models.Model):
     def get_upgrade_kit_discount(self, tier):
         return self.upgrade_kits.get(tier, {"price": 0})["price"]
 
-    def upgrade_or_downgrade_tank(self, from_tank, to_tank, extra_upgrade_kit_tiers=[]):
+
+    def upgrade_tank_manu(self, from_tank, to_tank, extra_upgrade_kit_tiers=[]):
         if not self.tanks.filter(id=from_tank.id).exists():
             raise ValidationError("You do not own this tank.")
         if not self.manufacturers.filter(id__in=to_tank.manufacturers.all()).exists():
             raise ValidationError("This tank is not available from your manufacturers.")
+
+        current_tank = from_tank
+
+        while current_tank != to_tank:
+            try:
+                upgrade_path = UpgradePath.objects.get(from_tank=current_tank, to_tank__in=Tank.objects.all())
+            except UpgradePath.DoesNotExist:
+                raise ValidationError(f"No upgrade path found from {current_tank.name}.")
+
+            current_tank = upgrade_path.to_tank
+
+        all_needed_kits = extra_upgrade_kit_tiers
+        missing_kits = [kit for kit in all_needed_kits if kit not in self.upgrade_kits or self.upgrade_kits[kit]['quantity'] <= 0]
+        if missing_kits:
+            raise ValidationError(f"Missing upgrade kits: {', '.join(missing_kits)}")
+
+        total_extra_discount = sum(
+            self.get_upgrade_kit_discount(tier) for tier in extra_upgrade_kit_tiers if tier in self.UPGRADE_KITS)
+        cost = to_tank.price - from_tank.price if to_tank.battle_rating >= from_tank.battle_rating else (to_tank.price - from_tank.price) / 2
+        cost -= total_extra_discount
+        cost = max(cost, 0)
+
+        if cost > self.balance:
+            raise ValidationError("Insufficient balance for this upgrade or downgrade.")
+
+        for kit in extra_upgrade_kit_tiers:
+            if kit in self.upgrade_kits:
+                self.upgrade_kits[kit]['quantity'] -= 1
+
+        self.balance -= cost
+        self.tanks.through.objects.filter(team=self, tank=from_tank).delete()
+        self.tanks.through.objects.create(team=self, tank=to_tank)
+        self.save()
+
+        return f"Tank {from_tank.name} upgraded/downgraded to {to_tank.name}. Total cost: {cost}. Remaining balance: {self.balance}"
+
+
+    def upgrade_or_downgrade_tank(self, from_tank, to_tank, extra_upgrade_kit_tiers=[]):
+        print(self.upgrade_kits)
+        if not self.tanks.filter(id=from_tank.id).exists():
+            raise ValidationError("You do not own this tank.")
 
         # Initialize total cost and start from the given tank
         total_cost = 0
@@ -132,6 +174,7 @@ class Team(models.Model):
         return f"Tank {from_tank.name} upgraded/downgraded to {to_tank.name}. Total cost: {total_cost}. Remaining balance: {self.balance}"
 
 
+
 class Tank(models.Model):
 
     name = models.CharField(max_length=50)
@@ -146,10 +189,8 @@ class Tank(models.Model):
         else:
             old_price = None
 
-        # Save the tank
         super().save(*args, **kwargs)
 
-        # Update UpgradePaths if price has changed
         if old_price is not None and old_price != self.price:
             for upgrade_path in UpgradePath.objects.filter(from_tank=self):
                 upgrade_path.cost = upgrade_path.calculate_cost()

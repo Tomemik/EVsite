@@ -36,8 +36,6 @@ class TankUpgradeTests(TestCase):
         UpgradePath.objects.create(from_tank=self.tank2, to_tank=self.tank3)
         UpgradePath.objects.create(from_tank=self.tank3, to_tank=self.tank4)
 
-        print(UpgradePath.objects.all().values())
-
     def test_purchase_tank(self):
         try:
             purchase_message = self.team1.purchase_tank(self.tank1)
@@ -47,9 +45,18 @@ class TankUpgradeTests(TestCase):
 
     def test_upgrade_tank(self):
         try:
-            self.team1.purchase_tank(self.tank1)
-            self.team1.add_upgrade_kit('T1',2)
-            upgrade_message = self.team1.upgrade_or_downgrade_tank(from_tank=self.tank1, to_tank=self.tank4, extra_upgrade_kit_tiers=['T1'])
+            self.team2.purchase_tank(self.tank1)
+            self.team2.add_upgrade_kit('T1',2)
+            upgrade_message = self.team2.upgrade_or_downgrade_tank(from_tank=self.tank1, to_tank=self.tank4, extra_upgrade_kit_tiers=['T1'])
             self.assertEqual(upgrade_message, f"Tank {self.tank1.name} upgraded/downgraded to {self.tank4.name}. Total cost: {113000}. Remaining balance: {217000}")
+        except ValidationError as e:
+            self.fail(f"Upgrade failed with error: {e}")
+
+    def test_manu_upgrade(self):
+        try:
+            self.team1.purchase_tank(self.tank1)
+            self.team1.add_upgrade_kit('T1', 2)
+            upgrade_message = self.team1.upgrade_tank_manu(from_tank=self.tank1, to_tank=self.tank4, extra_upgrade_kit_tiers=['T1', 'T1'])
+            self.assertEqual(upgrade_message, f"Tank {self.tank1.name} upgraded/downgraded to {self.tank4.name}. Total cost: {80000}. Remaining balance: {250000}")
         except ValidationError as e:
             self.fail(f"Upgrade failed with error: {e}")
