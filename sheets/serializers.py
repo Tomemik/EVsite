@@ -2,18 +2,18 @@ from rest_framework import serializers
 from .models import Manufacturer, Team, Tank, UpgradePath, TeamTank
 
 
-class ManufacturerSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Manufacturer
-        fields = ['id', 'name']
-
-
 class TankSerializer(serializers.ModelSerializer):
-    manufacturers = ManufacturerSerializer(many=True, read_only=True)
-
     class Meta:
         model = Tank
-        fields = ['id', 'name', 'battle_rating', 'price', 'manufacturers']
+        fields = ['id', 'name', 'battle_rating', 'price', 'rank', 'type']
+
+
+class ManufacturerSerializer(serializers.ModelSerializer):
+    tanks = TankSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Manufacturer
+        fields = ['id', 'name', 'tanks']
 
 
 class UpgradePathSerializer(serializers.ModelSerializer):

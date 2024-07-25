@@ -3,9 +3,6 @@ from django.db.models import F, Q
 from rest_framework.exceptions import ValidationError
 
 
-# Create your models here.
-
-
 class Manufacturer(models.Model):
     name = models.CharField(max_length=50)
 
@@ -180,8 +177,13 @@ class Tank(models.Model):
     name = models.CharField(max_length=50)
     battle_rating = models.FloatField(default=1.0)
     price = models.IntegerField(default=0)
+    rank = models.IntegerField(default=1)
+    type = models.CharField(max_length=50, default='MT')
     upgrades = models.ManyToManyField('self', through='UpgradePath', symmetrical=False, related_name='downgrades')
     manufacturers = models.ManyToManyField(Manufacturer, related_name='tanks')
+
+    def __str__(self):
+        return self.name
 
     def save(self, *args, **kwargs):
         if self.pk:
