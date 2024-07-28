@@ -3,8 +3,8 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Team, Manufacturer, Tank
-from .serializers import TeamSerializer, ManufacturerSerializer, TankSerializer
+from .models import Team, Manufacturer, Tank, Match
+from .serializers import TeamSerializer, ManufacturerSerializer, TankSerializer, MatchSerializer, SlimMatchSerializer
 
 
 # Create your views here.
@@ -78,3 +78,49 @@ class TankDetailView(APIView):
             serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+
+class AllMatchesViewSlim(APIView):
+    def get(self, request):
+        matches = Match.objects.filter(was_played=False)
+        serializer = SlimMatchSerializer(matches, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class AllMatchesView(APIView):
+    def get(self, request):
+        matches = Match.objects.filter(was_played=False)
+        serializer = MatchSerializer(matches, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = MatchSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class ArchivedAllMatchesView(APIView):
+    def get(self, request):
+        matches = Match.objects.all()
+        serializer = MatchSerializer(matches, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = MatchSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class MatchView(APIView):
+    def get(self, request, pk):
+        match = Match.objects.get(pk=pk)
+        serializer = MatchSerializer(match)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request, pk):
+        match = Match.objects.get(pk=pk)
+        serializer = MatchSerializer(match, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)

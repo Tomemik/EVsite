@@ -3,23 +3,28 @@ from django.db.models import F, Q
 from rest_framework.exceptions import ValidationError
 
 
+def default_upgrade_kits():
+    return {
+        'T1': {'quantity': 0, 'price': 25000},
+        'T2': {'quantity': 0, 'price': 50000},
+        'T3': {'quantity': 0, 'price': 100000}
+    }
+
+
 class Manufacturer(models.Model):
     name = models.CharField(max_length=50)
 
 
 class Team(models.Model):
 
-    UPGRADE_KITS = {
-        'T1': {'quantity': 0, 'price': 25000},
-        'T2': {'quantity': 0, 'price': 50000},
-        'T3': {'quantity': 0, 'price': 100000}
-    }
-
     name = models.CharField(max_length=50)
     balance = models.IntegerField(default=0)
     manufacturers = models.ManyToManyField(Manufacturer, related_name='teams')
     tanks = models.ManyToManyField('Tank', through='TeamTank', related_name='teams')
-    upgrade_kits = models.JSONField(default=UPGRADE_KITS.copy())
+    upgrade_kits = models.JSONField(default=default_upgrade_kits)
+
+    def __str__(self):
+        return self.name
 
     def purchase_tank(self, tank):
         if tank.price > self.balance:
@@ -221,7 +226,55 @@ class UpgradePath(models.Model):
         else:
             self.cost = abs(price_difference)
 
+
 class TeamTank(models.Model):
     team = models.ForeignKey(Team, on_delete=models.CASCADE)
     tank = models.ForeignKey(Tank, on_delete=models.CASCADE)
     is_upgradable = models.BooleanField(default=True)
+
+
+class Match(models.Model):
+    MODE_CHOICES = [
+        ('traditional', 'Traditional'),
+        ('advanced', 'Advanced'),
+        ('evolved', 'Evolved'),
+    ]
+
+    GAMEMODE_CHOICES = [
+        ('annihilation', 'Annihilation'),
+        ('domination', 'Domination'),
+        ('flag_tank', 'Flag Tank'),
+    ]
+
+    MONEY_RULES = [
+        ('money_rule', 'Money Rule'),
+        ('even_split', 'Even Split'),
+    ]
+
+    datetime = models.DateTimeField()
+    mode = models.CharField(max_length=50, choices=MODE_CHOICES)
+    gamemode = models.CharField(max_length=50, choices=GAMEMODE_CHOICES)
+    best_of_number = models.IntegerField()
+    map_selection = models.CharField(max_length=255)
+    money_rules = models.CharField(max_length=50, choices=MONEY_RULES)
+    special_rules = models.TextField(blank=True, null=True)
+    teams = models.ManyToManyField(Team, through='TeamMatch', related_name='matches')
+    was_played = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Match on {self.datetime} - {self.mode} - {self.gamemode}"
+
+
+class TeamMatch(models.Model):
+    SIDE_CHOICES = [
+        ('team_1', 'Team 1'),
+        ('team_2', 'Team 2'),
+    ]
+
+    match = models.ForeignKey(Match, on_delete=models.CASCADE)
+    team = models.ForeignKey(Team, on_delete=models.CASCADE)
+    tanks = models.ManyToManyField(Tank, related_name='team_matches')
+    side = models.CharField(max_length=10, choices=SIDE_CHOICES, default='team_1')
+
+    def __str__(self):
+        return f"{self.team.name} in {self.match} with: \n {self.tanks}"

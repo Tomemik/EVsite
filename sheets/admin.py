@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Manufacturer, Team, Tank, UpgradePath, TeamTank
+from .models import Manufacturer, Team, Tank, UpgradePath, TeamTank, Match, TeamMatch
 
 
 class ManufacturerAdmin(admin.ModelAdmin):
@@ -35,8 +35,32 @@ class TeamTankAdmin(admin.ModelAdmin):
     list_filter = ('is_upgradable',)
 
 
+class TeamMatchInline(admin.TabularInline):
+    model = TeamMatch
+    extra = 1
+    filter_horizontal = ('tanks',)
+    fields = ('team', 'side', 'tanks')
+    show_change_link = True
+
+
+class MatchAdmin(admin.ModelAdmin):
+    list_display = ('datetime', 'mode', 'gamemode', 'best_of_number', 'map_selection')
+    search_fields = ('mode', 'gamemode', 'map_selection')
+    inlines = [TeamMatchInline]
+    list_filter = ('mode', 'gamemode', 'datetime')
+
+
+class TeamMatchAdmin(admin.ModelAdmin):
+    list_display = ('match', 'team', 'side')
+    search_fields = ('match__datetime', 'team__name')
+    filter_horizontal = ('tanks',)
+    list_filter = ('side',)
+
+
 admin.site.register(Manufacturer, ManufacturerAdmin)
 admin.site.register(Team, TeamAdmin)
 admin.site.register(Tank, TankAdmin)
 admin.site.register(UpgradePath, UpgradePathAdmin)
 admin.site.register(TeamTank, TeamTankAdmin)
+admin.site.register(Match, MatchAdmin)
+admin.site.register(TeamMatch, TeamMatchAdmin)
