@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import Manufacturer, Team, Tank, UpgradePath, TeamTank, Match, TeamMatch
+from .models import Manufacturer, Team, Tank, UpgradePath, TeamTank, Match, TeamMatch, default_upgrade_kits, \
+    MatchResult, Substitute, TankLost, TeamResult
 
 
 class ManufacturerAdmin(admin.ModelAdmin):
@@ -13,7 +14,7 @@ class TeamAdmin(admin.ModelAdmin):
     readonly_fields = ('upgrade_kits',)
 
     def save_model(self, request, obj, form, change):
-        obj.upgrade_kits = {tier: data.copy() for tier, data in Team.UPGRADE_KITS.items()}
+        obj.upgrade_kits = {tier: data.copy() for tier, data in default_upgrade_kits().items()}
         super().save_model(request, obj, form, change)
 
 
@@ -57,6 +58,30 @@ class TeamMatchAdmin(admin.ModelAdmin):
     list_filter = ('side',)
 
 
+class TankLostInline(admin.TabularInline):
+    model = TankLost
+    extra = 1
+
+
+class SubstituteInline(admin.TabularInline):
+    model = Substitute
+    extra = 1
+
+
+class TeamResultInline(admin.TabularInline):
+    model = TeamResult
+    extra = 1
+
+
+class MatchResultAdmin(admin.ModelAdmin):
+    list_display = ('match', 'winning_side', 'judge')
+    inlines = [TankLostInline, SubstituteInline, TeamResultInline]
+
+    def judge(self, obj):
+        return obj.judge.name if obj.judge else '-'
+
+
+admin.site.register(MatchResult, MatchResultAdmin)
 admin.site.register(Manufacturer, ManufacturerAdmin)
 admin.site.register(Team, TeamAdmin)
 admin.site.register(Tank, TankAdmin)

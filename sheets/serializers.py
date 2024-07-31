@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import Manufacturer, Team, Tank, UpgradePath, TeamTank, Match, TeamMatch
+from .models import Manufacturer, Team, Tank, UpgradePath, TeamTank, Match, TeamMatch, Substitute, MatchResult, \
+    TankLost, TeamResult
 
 
 class TankSerializerSlim(serializers.ModelSerializer):
@@ -120,3 +121,49 @@ class SlimMatchSerializer(serializers.ModelSerializer):
     class Meta:
         model = Match
         fields = ['datetime', 'teammatch_set']
+
+
+class TeamResultSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TeamResult
+        fields = ['team', 'bonuses', 'penalties']
+
+
+class TankLostSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TankLost
+        fields = ['team', 'tank', 'quantity']
+
+
+class SubstituteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Substitute
+        fields = ['team', 'activity']
+
+
+class MatchResultSerializer(serializers.ModelSerializer):
+    team_results = TeamResultSerializer(many=True)
+    tanks_lost = TankLostSerializer(many=True)
+    substitutes = SubstituteSerializer(many=True)
+
+    class Meta:
+        model = MatchResult
+        fields = ['match', 'winning_side', 'judge', 'team_results', 'tanks_lost', 'substitutes']
+
+    def create(self, validated_data):
+        team_results_data = validated_data.pop('team_results')
+        tanks_lost_data = validated_data.pop('tanks_lost')
+        substitutes_data = validated_data.pop('substitutes')
+
+        match_result = MatchResult.objects.create(**validated_data)
+
+        for team_result_data in team_results_data:
+            TeamResult.objects.create(match_result=match_result, **team_result_data)
+
+        for tank_lost_data in tanks_lost_data:
+            TankLost.objects.create(match_result=match_result, **tank_lost_data)
+
+        for substitute_data in substitutes_data:
+            Substitute.objects.create(match_result=match_result, **substitute_data)
+
+        return match_result

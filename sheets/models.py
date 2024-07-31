@@ -176,7 +176,6 @@ class Team(models.Model):
         return f"Tank {from_tank.name} upgraded/downgraded to {to_tank.name}. Total cost: {total_cost}. Remaining balance: {self.balance}"
 
 
-
 class Tank(models.Model):
 
     name = models.CharField(max_length=50)
@@ -259,7 +258,7 @@ class Match(models.Model):
     money_rules = models.CharField(max_length=50, choices=MONEY_RULES)
     special_rules = models.TextField(blank=True, null=True)
     teams = models.ManyToManyField(Team, through='TeamMatch', related_name='matches')
-    was_played = models.BooleanField(default=False)
+    was_played  = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Match on {self.datetime} - {self.mode} - {self.gamemode}"
@@ -278,3 +277,29 @@ class TeamMatch(models.Model):
 
     def __str__(self):
         return f"{self.team.name} in {self.match} with: \n {self.tanks}"
+
+
+class MatchResult(models.Model):
+    match = models.OneToOneField(Match, on_delete=models.CASCADE)
+    winning_side = models.CharField(max_length=10, choices=TeamMatch.SIDE_CHOICES)
+    judge = models.ForeignKey(Team, on_delete=models.SET_NULL, null=True, related_name='judged_matches')
+
+
+class TeamResult(models.Model):
+    match_result = models.ForeignKey(MatchResult, on_delete=models.CASCADE, related_name='team_results')
+    team = models.ForeignKey(Team, on_delete=models.CASCADE)
+    bonuses = models.FloatField(blank=True, null=True)
+    penalties = models.FloatField(blank=True, null=True)
+
+
+class TankLost(models.Model):
+    match_result = models.ForeignKey(MatchResult, on_delete=models.CASCADE, related_name='tanks_lost')
+    team = models.ForeignKey(Team, on_delete=models.CASCADE)
+    tank = models.ForeignKey(Tank, on_delete=models.CASCADE)
+    quantity = models.IntegerField()
+
+
+class Substitute(models.Model):
+    match_result = models.ForeignKey(MatchResult, on_delete=models.CASCADE, related_name='substitutes')
+    team = models.ForeignKey(Team, on_delete=models.CASCADE)
+    activity = models.IntegerField(choices=[(1, 'Low'), (2, 'Medium'), (3, 'High')])
