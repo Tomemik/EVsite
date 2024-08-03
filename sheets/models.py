@@ -72,7 +72,7 @@ class Team(models.Model):
 
         total_extra_discount = sum(
             self.get_upgrade_kit_discount(tier) for tier in extra_upgrade_kit_tiers if tier in self.UPGRADE_KITS)
-        cost = to_tank.price - from_tank.price if to_tank.battle_rating >= from_tank.battle_rating else (to_tank.price - from_tank.price) / 2
+        cost = to_tank.price - from_tank.price if to_tank.price >= from_tank.price else (to_tank.price - from_tank.price) / 2
         cost -= total_extra_discount
         cost = max(cost, 0)
 
@@ -220,7 +220,7 @@ class UpgradePath(models.Model):
         """Calculate the cost based on price differences and battle rating."""
         price_difference = self.to_tank.price - self.from_tank.price
         print(price_difference)
-        if self.from_tank.battle_rating > self.to_tank.battle_rating:
+        if self.from_tank.price > self.to_tank.price:
             self.cost = abs(price_difference / 2)
         else:
             self.cost = abs(price_difference)
@@ -283,6 +283,170 @@ class MatchResult(models.Model):
     match = models.OneToOneField(Match, on_delete=models.CASCADE)
     winning_side = models.CharField(max_length=10, choices=TeamMatch.SIDE_CHOICES)
     judge = models.ForeignKey(Team, on_delete=models.SET_NULL, null=True, related_name='judged_matches')
+
+    def calculate_average_rank(self):
+        tanks = Tank.objects.filter(team_matches__match=self.match)
+
+        total_rank_br = sum(tank.rank * tank.battle_rating for tank in tanks)
+        total_br = sum(tank.battle_rating for tank in tanks)
+
+        if total_br > 0:
+            average_rank = total_rank_br / total_br
+        else:
+            average_rank = 0
+
+        return round(average_rank)
+
+    def calculate_base_reward(self, average_rank):
+
+        advanced_rewards = [
+            {"rank": 1, "winner": 20000, "loser": 15000},
+            {"rank": 2, "winner": 40000, "loser": 30000},
+            {"rank": 3, "winner": 60000, "loser": 45000},
+            {"rank": 4, "winner": 80000, "loser": 60000},
+            {"rank": 5, "winner": 100000, "loser": 75000},
+        ]
+
+        flag_rewards = [
+            {"rank": 1, "winner": 35000, "loser": 15000},
+            {"rank": 2, "winner": 60000, "loser": 25000},
+            {"rank": 3, "winner": 85000, "loser": 40000},
+            {"rank": 4, "winner": 11000, "loser": 50000},
+            {"rank": 5, "winner": 150000, "loser": 70000},
+        ]
+
+        trad_bo5_rewards = [
+            {"rank": 1, "winner": 20000, "loser": 15000},
+            {"rank": 2, "winner": 40000, "loser": 30000},
+            {"rank": 3, "winner": 55000, "loser": 40000},
+            {"rank": 4, "winner": 75000, "loser": 55000},
+            {"rank": 5, "winner": 95000, "loser": 70000},
+        ]
+
+        trad_bo3_rewards = [
+            {"rank": 1, "winner": 15000, "loser": 12000},
+            {"rank": 2, "winner": 30000, "loser": 23000},
+            {"rank": 3, "winner": 45000, "loser": 34000},
+            {"rank": 4, "winner": 60000, "loser": 45000},
+            {"rank": 5, "winner": 75000, "loser": 56000},
+        ]
+
+        mode = self.match.mode
+        game_mode = self.match.gamemode
+        best_of = self.match.best_of_number
+
+        if mode == "traditional":
+            if best_of == 3:
+                return trad_bo3_rewards[min(int(round(average_rank)-1), 4)]["winner"], trad_bo3_rewards[min(int(round(average_rank)-1), 4)]["loser"]
+            if best_of == 5:
+                return trad_bo5_rewards[min(int(round(average_rank)-1), 4)]["winner"], trad_bo5_rewards[min(int(round(average_rank)-1), 4)]["loser"]
+        elif mode == "advanced":
+            if game_mode == "flag":
+                return flag_rewards[min(int(round(average_rank)-1), 4)]["winner"], flag_rewards[min(int(round(average_rank)-1), 4)]["loser"]
+            else:
+                return advanced_rewards[min(int(round(average_rank)-1), 4)]["winner"], advanced_rewards[min(int(round(average_rank)-1), 4)]["loser"]
+
+        return 0, 0
+
+    def calculate_rewards(self):
+        average_rank = self.calculate_average_rank()
+        winner_base_reward, loser_base_reward = self.calculate_base_reward(average_rank)
+        print(average_rank)
+        print(winner_base_reward, loser_base_reward)
+
+        team_rewards = {team.id: 0 for team in Team.objects.all()}
+
+        teams_on_side = {
+            'team_1': list(TeamMatch.objects.filter(match=self.match, side='team_1').values_list('team_id', flat=True)),
+            'team_2': list(TeamMatch.objects.filter(match=self.match, side='team_2').values_list('team_id', flat=True)),
+        }
+
+        num_teams_on_side = {
+            'team_1': len(teams_on_side['team_1']),
+            'team_2': len(teams_on_side['team_2']),
+        }
+
+        total_loss_penalty_team_1 = 0
+        total_gain_reward_team_1 = 0
+        total_loss_penalty_team_2 = 0
+        total_gain_reward_team_2 = 0
+
+        for tank_lost in self.tanks_lost.all():
+            team_id = tank_lost.team.id
+            tank_price = tank_lost.tank.price
+            quantity = tank_lost.quantity
+            side = 'team_1' if team_id in teams_on_side['team_1'] else 'team_2'
+            other_side = 'team_2' if side == 'team_1' else 'team_1'
+
+            loss_penalty = tank_price * 0.02 * quantity
+            gain_reward = tank_price * 0.03 * quantity
+
+            if side == 'team_1':
+                total_loss_penalty_team_1 += loss_penalty
+                total_gain_reward_team_2 += gain_reward
+            else:
+                total_gain_reward_team_1 += gain_reward
+                total_loss_penalty_team_2 += loss_penalty
+
+        if self.winning_side == 'team_1':
+            winner_base_reward = winner_base_reward + total_gain_reward_team_1 - total_loss_penalty_team_1
+            loser_base_reward = loser_base_reward + total_gain_reward_team_2 - total_loss_penalty_team_2
+        else:
+            winner_base_reward = winner_base_reward + total_loss_penalty_team_2 + total_gain_reward_team_2
+            loser_base_reward = loser_base_reward + total_gain_reward_team_1 - total_loss_penalty_team_1
+
+        winning_teams = teams_on_side[self.winning_side]
+        losing_teams = teams_on_side['team_1' if self.winning_side == 'team_2' else 'team_2']
+
+        substitutes_rewards = {
+            'team_1': 0,
+            'team_2': 0,
+        }
+        '''
+        for substitute in self.substitutes.all():
+            team_id = substitute.team.id
+            activity = substitute.activity
+            side = 'team_1' if team_id in teams_on_side['team_1'] else 'team_2'
+            reward_percentage = 0.05 * activity
+            base_reward = winner_base_reward if side == self.winning_side else loser_base_reward
+
+            substitute_reward = base_reward * reward_percentage / num_teams_on_side[side]
+            substitutes_rewards[side] += substitute_reward
+            team_rewards[team_id] += substitute_reward
+        '''
+        if self.winning_side == 'team_1':
+            winner_base_reward = winner_base_reward - substitutes_rewards['team_1']
+            loser_base_reward = loser_base_reward - substitutes_rewards['team_2']
+        else:
+            winner_base_reward = winner_base_reward - substitutes_rewards['team_2']
+            loser_base_reward = loser_base_reward - substitutes_rewards['team_1']
+
+        if self.match.mode in ["traditional", "flag"]:
+            for team in winning_teams:
+                team_rewards[team] = winner_base_reward
+            for team in losing_teams:
+                team_rewards[team] = loser_base_reward
+        else:
+            winner_total_reward = winner_base_reward
+            loser_total_reward = loser_base_reward
+
+            for team in winning_teams:
+                team_rewards[team] += winner_total_reward / len(winning_teams)
+            for team in losing_teams:
+                team_rewards[team] += loser_total_reward / len(losing_teams)
+
+        for team_result in self.team_results.all():
+            team_id = team_result.team.id
+            if team_result.bonuses:
+                team_rewards[team_id] += 10000 * team_result.bonuses
+            if team_result.penalties:
+                team_rewards[team_id] -= 10000 * average_rank * team_result.penalties
+            print(team_id, team_rewards[team_id])
+
+        for team_id, reward in team_rewards.items():
+            team = Team.objects.get(id=team_id)
+            team.balance += reward
+            team.save()
 
 
 class TeamResult(models.Model):

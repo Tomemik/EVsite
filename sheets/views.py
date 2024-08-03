@@ -142,3 +142,10 @@ class MatchResultsView(APIView):
         else:
             print(serializer.errors)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CalcTestView(APIView):
+    def get(self, request, pk):
+        matchResult = MatchResult.objects.get(match__pk=pk)
+        matchResult.calculate_rewards()
+        return Response(status=status.HTTP_200_OK)

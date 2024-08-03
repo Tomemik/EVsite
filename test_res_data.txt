@@ -1,0 +1,79 @@
+{
+    "match": 2,
+    "winning_side": "team_1",
+    "judge": "ooarai",
+    "team_results": [
+        {
+            "team": "kuro",
+            "bonuses": 1.0,
+            "penalties": 1.0
+        },
+        {
+            "team": "ttg",
+            "bonuses": 0.0,
+            "penalties": 0.0
+        },
+        {
+            "team": "ooarai",
+            "bonuses": 0.5,
+            "penalties": 2.0
+        }
+    ],
+    "tanks_lost": [
+        {
+            "team": "kuro",
+            "tank": "M4",
+            "quantity": 2
+        },
+        {
+            "team": "kuro",
+            "tank": "M4A2",
+            "quantity": 2
+        },
+        {
+            "team": "kuro",
+            "tank": "M4A1",
+            "quantity": 2
+        },
+        {
+            "team": "kuro",
+            "tank": "M4A4",
+            "quantity": 2
+        },
+        {
+            "team": "ooarai",
+            "tank": "M4",
+            "quantity": 2
+        },
+        {
+            "team": "ooarai",
+            "tank": "M4A2",
+            "quantity": 2
+        },
+        {
+            "team": "ooarai",
+            "tank": "M4A1",
+            "quantity": 2
+        },
+        {
+            "team": "ooarai",
+            "tank": "M4A4",
+            "quantity": 2
+        },
+        {
+            "team": "ttg",
+            "tank": "M6A1",
+            "quantity": 1
+        }
+    ],
+    "substitutes": [
+        {
+            "team": "ooarai",
+            "activity": 2
+        },
+        {
+            "team": "kuro",
+            "activity": 1
+        }
+    ]
+}

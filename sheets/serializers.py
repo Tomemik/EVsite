@@ -58,6 +58,7 @@ class TeamMatchSerializer(serializers.ModelSerializer):
             team_match.tanks.add(tank)
         return team_match
 
+
 class MatchSerializer(serializers.ModelSerializer):
     teammatch_set = TeamMatchSerializer(many=True)
 
@@ -67,6 +68,7 @@ class MatchSerializer(serializers.ModelSerializer):
             'datetime', 'mode', 'gamemode', 'best_of_number',
             'map_selection', 'money_rules', 'special_rules', 'teammatch_set'
         ]
+        depth = 1
 
     def create(self, validated_data):
         team_matches_data = validated_data.pop('teammatch_set')
@@ -124,46 +126,77 @@ class SlimMatchSerializer(serializers.ModelSerializer):
 
 
 class TeamResultSerializer(serializers.ModelSerializer):
+    team_name = serializers.CharField(source='team.name', write_only=True)
+    team = serializers.SlugRelatedField(slug_field='name', read_only=True)
+
     class Meta:
         model = TeamResult
-        fields = ['team', 'bonuses', 'penalties']
+        fields = ['team', 'team_name', 'bonuses', 'penalties']
 
 
 class TankLostSerializer(serializers.ModelSerializer):
+    team_name = serializers.CharField(source='team.name', write_only=True)
+    team = serializers.SlugRelatedField(slug_field='name', read_only=True)
+    tank_name = serializers.CharField(source='tank.name', write_only=True)
+    tank = serializers.SlugRelatedField(slug_field='name', read_only=True)
+
     class Meta:
         model = TankLost
-        fields = ['team', 'tank', 'quantity']
+        fields = ['team', 'team_name', 'tank', 'tank_name', 'quantity']
 
 
 class SubstituteSerializer(serializers.ModelSerializer):
+    team_name = serializers.CharField(source='team.name', write_only=True)
+    team = serializers.SlugRelatedField(slug_field='name', read_only=True)
+
     class Meta:
         model = Substitute
-        fields = ['team', 'activity']
+        fields = ['team', 'team_name', 'activity']
 
 
 class MatchResultSerializer(serializers.ModelSerializer):
     team_results = TeamResultSerializer(many=True)
     tanks_lost = TankLostSerializer(many=True)
     substitutes = SubstituteSerializer(many=True)
+    judge_name = serializers.CharField(source='judge.name', write_only=True)
+    judge = serializers.SlugRelatedField(slug_field='name', read_only=True)
+    match_id = serializers.IntegerField(source='match.id', write_only=True)
+    match = serializers.SlugRelatedField(slug_field='id', read_only=True)
 
     class Meta:
         model = MatchResult
-        fields = ['match', 'winning_side', 'judge', 'team_results', 'tanks_lost', 'substitutes']
+        fields = ['match', 'match_id', 'winning_side', 'judge', 'judge_name', 'team_results', 'tanks_lost',
+                  'substitutes']
+        depth = 1
 
     def create(self, validated_data):
+        match_data = validated_data.pop('match')
+        match = Match.objects.get(id=match_data.id)
+        judge_data = validated_data.pop('judge')
+        judge = Team.objects.get(name=judge_data['name'])
+
         team_results_data = validated_data.pop('team_results')
         tanks_lost_data = validated_data.pop('tanks_lost')
         substitutes_data = validated_data.pop('substitutes')
 
-        match_result = MatchResult.objects.create(**validated_data)
+        match_result = MatchResult.objects.create(match=match, judge=judge, **validated_data)
 
         for team_result_data in team_results_data:
-            TeamResult.objects.create(match_result=match_result, **team_result_data)
+            team_name = team_result_data.pop('team')['name']
+            print(team_name)
+            team = Team.objects.get(name=team_name)
+            TeamResult.objects.create(match_result=match_result, team=team, **team_result_data)
 
         for tank_lost_data in tanks_lost_data:
-            TankLost.objects.create(match_result=match_result, **tank_lost_data)
+            team_name = tank_lost_data.pop('team')['name']
+            tank_name = tank_lost_data.pop('tank')['name']
+            team = Team.objects.get(name=team_name)
+            tank = Tank.objects.get(name=tank_name)
+            TankLost.objects.create(match_result=match_result, team=team, tank=tank, **tank_lost_data)
 
         for substitute_data in substitutes_data:
-            Substitute.objects.create(match_result=match_result, **substitute_data)
+            team_name = substitute_data.pop('team')['name']
+            team = Team.objects.get(name=team_name)
+            Substitute.objects.create(match_result=match_result, team=team, **substitute_data)
 
         return match_result

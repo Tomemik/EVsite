@@ -10,4 +10,6 @@ urlpatterns = [
     path('matches/archived/', views.AllMatchesView.as_view(), name='matches-detail'),
     path('matches/<int:pk>/', views.MatchView.as_view(), name='match-detail'),
     path('matches/<int:pk>/results/', views.MatchResultsView.as_view(), name='match-results'),
+    path('matches/<int:pk>/calc/', views.CalcTestView.as_view(), name='match-calc'),
+
 ]
