@@ -283,6 +283,7 @@ class MatchResult(models.Model):
     match = models.OneToOneField(Match, on_delete=models.CASCADE)
     winning_side = models.CharField(max_length=10, choices=TeamMatch.SIDE_CHOICES)
     judge = models.ForeignKey(Team, on_delete=models.SET_NULL, null=True, related_name='judged_matches')
+    is_calced = models.BooleanField(default=False)
 
     def calculate_average_rank(self):
         tanks = Tank.objects.filter(team_matches__match=self.match)
@@ -351,8 +352,6 @@ class MatchResult(models.Model):
     def calculate_rewards(self):
         average_rank = self.calculate_average_rank()
         winner_base_reward, loser_base_reward = self.calculate_base_reward(average_rank)
-        print(average_rank)
-        print(winner_base_reward, loser_base_reward)
 
         team_rewards = {team.id: 0 for team in Team.objects.all()}
 
@@ -389,37 +388,36 @@ class MatchResult(models.Model):
                 total_loss_penalty_team_2 += loss_penalty
 
         if self.winning_side == 'team_1':
-            winner_base_reward = winner_base_reward + total_gain_reward_team_1 - total_loss_penalty_team_1
-            loser_base_reward = loser_base_reward + total_gain_reward_team_2 - total_loss_penalty_team_2
+            winner_base_reward += total_gain_reward_team_1 - total_loss_penalty_team_1
+            loser_base_reward += total_gain_reward_team_2 - total_loss_penalty_team_2
         else:
-            winner_base_reward = winner_base_reward + total_loss_penalty_team_2 + total_gain_reward_team_2
-            loser_base_reward = loser_base_reward + total_gain_reward_team_1 - total_loss_penalty_team_1
-
-        winning_teams = teams_on_side[self.winning_side]
-        losing_teams = teams_on_side['team_1' if self.winning_side == 'team_2' else 'team_2']
+            winner_base_reward += total_gain_reward_team_2 - total_loss_penalty_team_2
+            loser_base_reward += total_gain_reward_team_1 - total_loss_penalty_team_1
 
         substitutes_rewards = {
             'team_1': 0,
             'team_2': 0,
         }
-        '''
+
         for substitute in self.substitutes.all():
-            team_id = substitute.team.id
+            side = substitute.side
             activity = substitute.activity
-            side = 'team_1' if team_id in teams_on_side['team_1'] else 'team_2'
             reward_percentage = 0.05 * activity
             base_reward = winner_base_reward if side == self.winning_side else loser_base_reward
 
-            substitute_reward = base_reward * reward_percentage / num_teams_on_side[side]
+            substitute_reward = base_reward * reward_percentage
             substitutes_rewards[side] += substitute_reward
-            team_rewards[team_id] += substitute_reward
-        '''
+            team_rewards[substitute.team.id] += substitute_reward
+
         if self.winning_side == 'team_1':
-            winner_base_reward = winner_base_reward - substitutes_rewards['team_1']
-            loser_base_reward = loser_base_reward - substitutes_rewards['team_2']
+            winner_base_reward -= substitutes_rewards['team_1']
+            loser_base_reward -= substitutes_rewards['team_2']
         else:
-            winner_base_reward = winner_base_reward - substitutes_rewards['team_2']
-            loser_base_reward = loser_base_reward - substitutes_rewards['team_1']
+            winner_base_reward -= substitutes_rewards['team_2']
+            loser_base_reward -= substitutes_rewards['team_1']
+
+        winning_teams = teams_on_side[self.winning_side]
+        losing_teams = teams_on_side['team_1' if self.winning_side == 'team_2' else 'team_2']
 
         if self.match.mode in ["traditional", "flag"]:
             for team in winning_teams:
@@ -441,12 +439,25 @@ class MatchResult(models.Model):
                 team_rewards[team_id] += 10000 * team_result.bonuses
             if team_result.penalties:
                 team_rewards[team_id] -= 10000 * average_rank * team_result.penalties
-            print(team_id, team_rewards[team_id])
+
+        combined_rewards = winner_base_reward + loser_base_reward
+        if self.match.mode == "bo3":
+            judge_reward = max(0.05 * combined_rewards, 5000)
+        elif self.match.mode == "bo5":
+            judge_reward = max(0.075 * combined_rewards, 7500)
+        else:
+            judge_reward = 5000
+
+        team_rewards[self.judge.id] += judge_reward
 
         for team_id, reward in team_rewards.items():
+            print(team_id, reward)
             team = Team.objects.get(id=team_id)
             team.balance += reward
             team.save()
+
+        self.is_calced = True
+        self.save()
 
 
 class TeamResult(models.Model):
@@ -464,6 +475,16 @@ class TankLost(models.Model):
 
 
 class Substitute(models.Model):
+    SIDE_CHOICES = [
+        ('team_1', 'Team 1'),
+        ('team_2', 'Team 2'),
+    ]
+
     match_result = models.ForeignKey(MatchResult, on_delete=models.CASCADE, related_name='substitutes')
-    team = models.ForeignKey(Team, on_delete=models.CASCADE)
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name='substitute_teams')
     activity = models.IntegerField(choices=[(1, 'Low'), (2, 'Medium'), (3, 'High')])
+    side = models.CharField(max_length=10, choices=SIDE_CHOICES, default='team_1')
+    team_played_for = models.ForeignKey(Team, on_delete=models.CASCADE, related_name='assisted_by_substitutes', blank=True, null=True)
+
+    def __str__(self):
+        return f"Substitute from {self.team.name} on {self.side} with activity level {self.activity}"

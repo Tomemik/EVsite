@@ -143,9 +143,22 @@ class MatchResultsView(APIView):
             print(serializer.errors)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    def patch(self, request, pk):
+        match = Match.objects.get(pk=pk)
+        serializer = MatchResultSerializer(match, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save(match=match)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            print(serializer.errors)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class CalcTestView(APIView):
     def get(self, request, pk):
         matchResult = MatchResult.objects.get(match__pk=pk)
-        matchResult.calculate_rewards()
-        return Response(status=status.HTTP_200_OK)
+        if not matchResult.is_calced:
+            matchResult.calculate_rewards()
+            return Response(status=status.HTTP_200_OK)
+        else:
+            return Response(status=status.HTTP_400_BAD_REQUEST)

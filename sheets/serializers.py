@@ -148,10 +148,12 @@ class TankLostSerializer(serializers.ModelSerializer):
 class SubstituteSerializer(serializers.ModelSerializer):
     team_name = serializers.CharField(source='team.name', write_only=True)
     team = serializers.SlugRelatedField(slug_field='name', read_only=True)
+    team_played_for_name = serializers.CharField(source='team_played_for.name', write_only=True)
+    team_played_for = serializers.SlugRelatedField(slug_field='name', read_only=True)
 
     class Meta:
         model = Substitute
-        fields = ['team', 'team_name', 'activity']
+        fields = ['team', 'team_name', 'activity', 'side', 'team_played_for', 'team_played_for_name']
 
 
 class MatchResultSerializer(serializers.ModelSerializer):
@@ -183,7 +185,6 @@ class MatchResultSerializer(serializers.ModelSerializer):
 
         for team_result_data in team_results_data:
             team_name = team_result_data.pop('team')['name']
-            print(team_name)
             team = Team.objects.get(name=team_name)
             TeamResult.objects.create(match_result=match_result, team=team, **team_result_data)
 
@@ -196,7 +197,9 @@ class MatchResultSerializer(serializers.ModelSerializer):
 
         for substitute_data in substitutes_data:
             team_name = substitute_data.pop('team')['name']
+            team_played_for_name = substitute_data.pop('team_played_for')['name']
             team = Team.objects.get(name=team_name)
-            Substitute.objects.create(match_result=match_result, team=team, **substitute_data)
+            team_played_for = Team.objects.get(name=team_played_for_name)
+            Substitute.objects.create(match_result=match_result, team=team, team_played_for=team_played_for, **substitute_data)
 
         return match_result
