@@ -441,12 +441,14 @@ class MatchResult(models.Model):
                 team_rewards[team_id] -= 10000 * average_rank * team_result.penalties
 
         combined_rewards = winner_base_reward + loser_base_reward
-        if self.match.mode == "bo3":
-            judge_reward = max(0.05 * combined_rewards, 5000)
-        elif self.match.mode == "bo5":
-            judge_reward = max(0.075 * combined_rewards, 7500)
+        if self.match.tanks.count() >= 12:
+            judge_reward = 0.075 * combined_rewards
         else:
-            judge_reward = 5000
+            judge_reward = 0.05 * combined_rewards
+        if self.match.mode == "bo5":
+            judge_reward = max(judge_reward, 7500)
+        else:
+            judge_reward = max(judge_reward, 5000)
 
         team_rewards[self.judge.id] += judge_reward
 
@@ -455,6 +457,11 @@ class MatchResult(models.Model):
             team = Team.objects.get(id=team_id)
             team.balance += reward
             team.save()
+
+        if self.match.mode in ["traditional", "domination"]:
+            for team in winning_teams + losing_teams:
+                team.objects.get(id=team.id)
+                team.add_upgrade_kit('T1', 1)
 
         self.is_calced = True
         self.save()
